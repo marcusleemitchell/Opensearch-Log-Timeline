@@ -1,0 +1,963 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>%PAGE_TITLE% — Request Timeline</title>
+        <style>
+            :root {
+                --bg: #0d1117;
+                --panel: #161b22;
+                --panel-border: #21262d;
+                --text: #c9d1d9;
+                --text-dim: #8b949e;
+                --mono: "SF Mono", "Roboto Mono", "Consolas", monospace;
+                --sans:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+                --c-2xx: #3fb950;
+                --c-2xx-bg: rgba(63, 185, 80, 0.12);
+                --c-3xx: #58a6ff;
+                --c-3xx-bg: rgba(88, 166, 255, 0.12);
+                --c-4xx: #d29922;
+                --c-4xx-bg: rgba(210, 153, 34, 0.14);
+                --c-5xx: #f85149;
+                --c-5xx-bg: rgba(248, 81, 73, 0.14);
+                --c-worker: #a371f7;
+                --c-worker-bg: rgba(163, 113, 247, 0.12);
+                --c-apns: #56d4dd;
+                --c-apns-bg: rgba(86, 212, 221, 0.12);
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                background: var(--bg);
+                color: var(--text);
+                font-family: var(--sans);
+                font-size: 13px;
+                line-height: 1.5;
+            }
+
+            .app {
+                max-width: 960px;
+                margin: 0 auto;
+                padding: 20px 18px 60px;
+            }
+
+            .header {
+                margin-bottom: 18px;
+            }
+            .header h1 {
+                font-size: 15px;
+                font-weight: 600;
+                margin: 0 0 4px;
+                color: #e6edf3;
+            }
+            .header .sub {
+                font-family: var(--mono);
+                font-size: 11.5px;
+                color: var(--text-dim);
+            }
+            .header .sub .id {
+                color: var(--c-apns);
+            }
+
+            .filters {
+                display: flex;
+                gap: 6px;
+                flex-wrap: wrap;
+                margin: 14px 0 16px;
+            }
+            .filter-btn {
+                font-family: var(--sans);
+                font-size: 11.5px;
+                font-weight: 600;
+                padding: 5px 10px;
+                border-radius: 5px;
+                cursor: pointer;
+                border: 1px solid var(--panel-border);
+                background: var(--panel);
+                color: var(--text-dim);
+                transition: all 0.12s ease;
+                user-select: none;
+            }
+            .filter-btn:hover {
+                color: var(--text);
+            }
+            .filter-btn.active {
+                color: var(--bg);
+                border-color: transparent;
+            }
+            .filter-btn[data-f="all"].active {
+                background: #e6edf3;
+            }
+            .filter-btn[data-f="2xx"].active {
+                background: var(--c-2xx);
+            }
+            .filter-btn[data-f="4xx"].active {
+                background: var(--c-4xx);
+            }
+            .filter-btn[data-f="5xx"].active {
+                background: var(--c-5xx);
+            }
+            .filter-btn[data-f="worker"].active {
+                background: var(--c-worker);
+            }
+            .filter-btn[data-f="apns"].active {
+                background: var(--c-apns);
+            }
+            .filter-btn .count {
+                opacity: 0.7;
+                margin-left: 4px;
+            }
+
+            .timeline {
+                position: relative;
+                padding-left: 28px;
+            }
+            .timeline::before {
+                content: "";
+                position: absolute;
+                left: 9px;
+                top: 6px;
+                bottom: 6px;
+                width: 1.5px;
+                background: var(--panel-border);
+            }
+
+            .entry {
+                position: relative;
+                margin-bottom: 6px;
+                cursor: pointer;
+            }
+            .entry.hidden {
+                display: none;
+            }
+
+            .dot {
+                position: absolute;
+                left: -28px;
+                top: 9px;
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                border: 2px solid var(--bg);
+            }
+            .dot.c2xx {
+                background: var(--c-2xx);
+            }
+            .dot.c3xx {
+                background: var(--c-3xx);
+            }
+            .dot.c4xx {
+                background: var(--c-4xx);
+            }
+            .dot.c5xx {
+                background: var(--c-5xx);
+            }
+            .dot.worker {
+                background: var(--c-worker);
+            }
+            .dot.apns {
+                background: var(--c-apns);
+            }
+
+            .row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                background: var(--panel);
+                border: 1px solid var(--panel-border);
+                border-radius: 6px;
+                padding: 8px 12px;
+                transition:
+                    border-color 0.12s ease,
+                    background 0.12s ease;
+            }
+            .entry.flagged .row {
+                border-color: var(--c-4xx);
+            }
+            .row:hover {
+                border-color: #30363d;
+                background: #1c2129;
+            }
+
+            .ts {
+                font-family: var(--mono);
+                font-size: 11px;
+                color: var(--text-dim);
+                white-space: nowrap;
+                width: 78px;
+                flex-shrink: 0;
+            }
+
+            .badge {
+                font-family: var(--mono);
+                font-size: 11px;
+                font-weight: 700;
+                padding: 2px 7px;
+                border-radius: 4px;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+            .badge.c2xx {
+                background: var(--c-2xx-bg);
+                color: var(--c-2xx);
+            }
+            .badge.c3xx {
+                background: var(--c-3xx-bg);
+                color: var(--c-3xx);
+            }
+            .badge.c4xx {
+                background: var(--c-4xx-bg);
+                color: var(--c-4xx);
+            }
+            .badge.c5xx {
+                background: var(--c-5xx-bg);
+                color: var(--c-5xx);
+            }
+            .badge.worker {
+                background: var(--c-worker-bg);
+                color: var(--c-worker);
+            }
+            .badge.apns {
+                background: var(--c-apns-bg);
+                color: var(--c-apns);
+            }
+
+            .method {
+                font-family: var(--mono);
+                font-size: 11px;
+                font-weight: 700;
+                color: var(--text-dim);
+                width: 34px;
+                flex-shrink: 0;
+            }
+
+            .main-text {
+                flex: 1;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                font-size: 12.5px;
+            }
+            .main-text .path {
+                font-family: var(--mono);
+                color: var(--text);
+            }
+            .main-text .label {
+                color: var(--text-dim);
+            }
+
+            .duration {
+                font-family: var(--mono);
+                font-size: 11px;
+                color: var(--text-dim);
+                flex-shrink: 0;
+                width: 56px;
+                text-align: right;
+            }
+            .duration.slow {
+                color: var(--c-4xx);
+            }
+
+            /* raw data icon button */
+            .raw-btn {
+                flex-shrink: 0;
+                width: 22px;
+                height: 22px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 4px;
+                border: 1px solid transparent;
+                background: transparent;
+                cursor: pointer;
+                color: var(--text-dim);
+                transition:
+                    color 0.12s,
+                    background 0.12s,
+                    border-color 0.12s;
+                font-size: 12px;
+                line-height: 1;
+                padding: 0;
+            }
+            .raw-btn:hover {
+                color: var(--c-apns);
+                background: var(--c-apns-bg);
+                border-color: var(--c-apns);
+            }
+
+            .chevron {
+                width: 14px;
+                flex-shrink: 0;
+                color: var(--text-dim);
+                transition: transform 0.15s ease;
+                font-size: 10px;
+            }
+            .entry.expanded .chevron {
+                transform: rotate(90deg);
+            }
+
+            .detail {
+                display: none;
+                margin: 4px 0 4px 0;
+                padding: 12px 14px;
+                background: #0a0d12;
+                border: 1px solid var(--panel-border);
+                border-radius: 6px;
+                font-family: var(--mono);
+                font-size: 11.5px;
+            }
+            .entry.expanded .detail {
+                display: block;
+            }
+
+            .detail-grid {
+                display: grid;
+                grid-template-columns: 110px 1fr;
+                gap: 5px 10px;
+            }
+            .detail-grid .k {
+                color: var(--text-dim);
+            }
+            .detail-grid .v {
+                color: var(--text);
+                word-break: break-all;
+            }
+            .detail-grid .v.hl {
+                color: var(--c-apns);
+            }
+            .detail-grid .v.err {
+                color: var(--c-4xx);
+            }
+
+            .checklist {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+                margin-top: 2px;
+            }
+            .chk-tag {
+                font-size: 10.5px;
+                padding: 1px 6px;
+                border-radius: 3px;
+                background: var(--panel);
+                color: var(--text-dim);
+            }
+            .chk-tag.target {
+                background: var(--c-apns-bg);
+                color: var(--c-apns);
+                font-weight: 700;
+            }
+
+            .empty-state {
+                text-align: center;
+                padding: 40px 0;
+                color: var(--text-dim);
+                font-size: 12px;
+            }
+
+            .legend {
+                margin-top: 24px;
+                padding-top: 14px;
+                border-top: 1px solid var(--panel-border);
+                font-size: 11px;
+                color: var(--text-dim);
+                display: flex;
+                gap: 16px;
+                flex-wrap: wrap;
+            }
+            .legend span {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+            }
+            .legend .sw {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+            }
+
+            /* ── Raw data modal ─────────────────────────────────────────────── */
+            .modal-overlay {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.65);
+                backdrop-filter: blur(3px);
+                z-index: 1000;
+                align-items: center;
+                justify-content: center;
+            }
+            .modal-overlay.open {
+                display: flex;
+            }
+
+            .modal {
+                background: var(--panel);
+                border: 1px solid var(--panel-border);
+                border-radius: 10px;
+                width: min(720px, 94vw);
+                max-height: 85vh;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+            }
+
+            .modal-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 14px 18px 12px;
+                border-bottom: 1px solid var(--panel-border);
+                flex-shrink: 0;
+            }
+            .modal-header h2 {
+                margin: 0;
+                font-size: 13px;
+                font-weight: 600;
+                color: #e6edf3;
+                font-family: var(--mono);
+            }
+            .modal-header .badge {
+                margin-left: 10px;
+            }
+            .raw-nav-btn {
+                background: none;
+                border: 1px solid var(--panel-border);
+                color: var(--text-dim);
+                font-size: 14px;
+                cursor: pointer;
+                line-height: 1;
+                padding: 3px 9px;
+                border-radius: 4px;
+                transition:
+                    color 0.1s,
+                    background 0.1s,
+                    border-color 0.1s;
+            }
+            .raw-nav-btn:hover:not(:disabled) {
+                color: var(--text);
+                background: #30363d;
+                border-color: #444c56;
+            }
+            .raw-nav-btn:disabled {
+                opacity: 0.25;
+                cursor: default;
+            }
+            .raw-nav-counter {
+                font-family: var(--mono);
+                font-size: 11px;
+                color: var(--text-dim);
+                min-width: 48px;
+                text-align: center;
+                user-select: none;
+            }
+
+            .modal-close {
+                background: none;
+                border: none;
+                color: var(--text-dim);
+                font-size: 18px;
+                cursor: pointer;
+                line-height: 1;
+                padding: 2px 4px;
+                border-radius: 4px;
+                transition:
+                    color 0.1s,
+                    background 0.1s;
+            }
+            .modal-close:hover {
+                color: var(--text);
+                background: #30363d;
+            }
+
+            .modal-body {
+                overflow-y: auto;
+                padding: 16px 18px 20px;
+                flex: 1;
+            }
+
+            .raw-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-family: var(--mono);
+                font-size: 11.5px;
+            }
+            .raw-table tr {
+                border-bottom: 1px solid #1c2129;
+            }
+            .raw-table tr:last-child {
+                border-bottom: none;
+            }
+            .raw-table tr.null-row td {
+                opacity: 0.38;
+            }
+            .raw-table td {
+                padding: 7px 8px;
+                vertical-align: top;
+                line-height: 1.45;
+            }
+            .raw-table td:first-child {
+                color: var(--text-dim);
+                white-space: nowrap;
+                width: 1%;
+                padding-right: 20px;
+                font-size: 11px;
+            }
+            .raw-table td:last-child {
+                color: var(--text);
+                word-break: break-all;
+            }
+
+            .raw-table .section-heading td {
+                padding: 14px 8px 4px;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                color: var(--text-dim);
+                border-bottom: 1px solid var(--panel-border);
+            }
+            .raw-table .section-heading:first-child td {
+                padding-top: 2px;
+            }
+
+            .val-null {
+                color: #444c56 !important;
+                font-style: italic;
+            }
+            .val-num {
+                color: #79c0ff;
+            }
+            .val-bool {
+                color: #ff7b72;
+            }
+            .val-ts {
+                color: var(--c-apns);
+            }
+            .val-arr {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+            .val-arr-item {
+                font-size: 10.5px;
+                padding: 1px 6px;
+                border-radius: 3px;
+                background: var(--panel-border);
+                color: var(--text);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="app">
+            <div class="header" id="header"></div>
+
+            <div class="filters" id="filters"></div>
+
+            <div class="timeline" id="timeline"></div>
+            <div class="empty-state" id="emptyState" style="display: none">
+                No entries match this filter.
+            </div>
+
+            <div class="legend">
+                <span
+                    ><i class="sw" style="background: var(--c-2xx)"></i>2xx
+                    success</span
+                >
+                <span
+                    ><i class="sw" style="background: var(--c-3xx)"></i>3xx
+                    redirect</span
+                >
+                <span
+                    ><i class="sw" style="background: var(--c-4xx)"></i>4xx
+                    client error</span
+                >
+                <span
+                    ><i class="sw" style="background: var(--c-5xx)"></i>5xx
+                    server error</span
+                >
+                <span
+                    ><i class="sw" style="background: var(--c-worker)"></i
+                    >background sync</span
+                >
+                <span
+                    ><i class="sw" style="background: var(--c-apns)"></i>push
+                    notification</span
+                >
+            </div>
+        </div>
+
+        <!-- Raw data modal -->
+        <div class="modal-overlay" id="rawOverlay" onclick="closeRaw(event)">
+            <div class="modal">
+                <div class="modal-header">
+                    <div style="display: flex; align-items: center; gap: 8px">
+                        <h2 id="rawTitle">Raw row data</h2>
+                        <div id="rawBadge"></div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px">
+                        <button
+                            class="raw-nav-btn"
+                            id="rawPrev"
+                            title="Previous record (&#x2190;)"
+                            onclick="navigateRaw(-1)"
+                        >
+                            &#x2190;
+                        </button>
+                        <span class="raw-nav-counter" id="rawCounter"></span>
+                        <button
+                            class="raw-nav-btn"
+                            id="rawNext"
+                            title="Next record (&#x2192;)"
+                            onclick="navigateRaw(1)"
+                        >
+                            &#x2192;
+                        </button>
+                        <button class="modal-close" onclick="closeRawBtn()">
+                            &#x2715;
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-body" id="modal-body-scroll">
+                    <table class="raw-table" id="rawTable"></table>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            const DATA = %RECORDS_JSON%;
+            const META = %META_JSON%;
+
+            function buildHeader() {
+              const m = META;
+              const h1 = 'Request &amp; Response Timeline';
+              let sub = '';
+              if (m.check_number) sub += `check_number <span class="id">${escapeHtml(m.check_number)}</span> &middot; `;
+              if (m.global_id)    sub += `global_id <span class="id">${escapeHtml(m.global_id)}</span> &middot; `;
+              if (m.check_id)     sub += `check_id <span class="id">${escapeHtml(m.check_id)}</span> &middot; `;
+              if (m.app_name)     sub += `${escapeHtml(m.app_name)} &middot; `;
+              if (m.start_t && m.end_t) sub += `${escapeHtml(m.start_t)} &ndash; ${escapeHtml(m.end_t)} UTC`;
+              else if (m.count)   sub += `${m.count} entries`;
+              sub = sub.replace(/ &middot; $/, '');
+              document.getElementById('header').innerHTML =
+                `<h1>${h1}</h1><div class="sub">${sub || (m.count + ' entries')}</div>`;
+            }
+
+            // Field display metadata: label, section, formatting hint
+            const FIELD_META = [
+              // Section: Identity
+              { key: 'ts_iso',       label: 'timestamp',       section: 'Identity',    fmt: 'ts'  },
+              { key: 'type',         label: 'type',             section: 'Identity',    fmt: 'str' },
+              { key: 'severity',     label: 'severity',         section: 'Identity',    fmt: 'str' },
+              { key: 'pod',          label: 'pod',              section: 'Identity',    fmt: 'str' },
+              // Section: HTTP
+              { key: 'method',       label: 'method',           section: 'HTTP',        fmt: 'str' },
+              { key: 'path',         label: 'path',             section: 'HTTP',        fmt: 'str' },
+              { key: 'status',       label: 'status',           section: 'HTTP',        fmt: 'num' },
+              { key: 'duration',     label: 'duration',         section: 'HTTP',        fmt: 'num', unit: 'ms' },
+              { key: 'request_id',   label: 'request_id',       section: 'HTTP',        fmt: 'str' },
+              { key: 'ip',           label: 'client_ip',        section: 'HTTP',        fmt: 'str' },
+              // Section: Worker / Event
+              { key: 'event',        label: 'event',            section: 'Worker',      fmt: 'str' },
+              { key: 'started_at',   label: 'started_at',       section: 'Worker',      fmt: 'ts'  },
+              { key: 'count',        label: 'checks_found',     section: 'Worker',      fmt: 'num' },
+              { key: 'check_numbers',label: 'check_numbers',    section: 'Worker',      fmt: 'arr' },
+              // Section: Message
+              { key: 'message',      label: 'message',          section: 'Message',     fmt: 'str' },
+              // ""Section: Internal
+              { key: 'ts_epoch',     label: 'ts_epoch',         section: 'Internal',    fmt: 'num' },
+            ];
+
+            function deriveTargetCheck() {
+              const tally = {};
+              DATA.forEach(rec => {
+                if (rec.type === 'http' && rec.path) {
+                  const m = rec.path.match(/check_number=(\w+)/);
+                  if (m) tally[m[1]] = (tally[m[1]] || 0) + 1;
+                }
+                if (rec.message) {
+                  const m = rec.message.match(/check_number=(\w+)/);
+                  if (m) tally[m[1]] = (tally[m[1]] || 0) + 1;
+                }
+              });
+              let best = null, bestCount = 0;
+              Object.entries(tally).forEach(([k, v]) => { if (v > bestCount) { best = k; bestCount = v; } });
+              return best;
+            }
+            const TARGET = { check: deriveTargetCheck() };
+
+            function statusClass(status) {
+              if (status >= 200 && status < 300) return 'c2xx';
+              if (status >= 300 && status < 400) return 'c3xx';
+              if (status >= 400 && status < 500) return 'c4xx';
+              if (status >= 500) return 'c5xx';
+              return 'c2xx';
+            }
+
+            const STATUS_TEXT = {
+              200: 'OK', 201: 'Created', 204: 'No Content',
+              301: 'Moved Permanently', 302: 'Found', 304: 'Not Modified',
+              400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 422: 'Unprocessable Entity', 429: 'Too Many Requests',
+              500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable', 504: 'Gateway Timeout'
+            };
+
+            function fmtTime(iso) {
+              const d = new Date(iso);
+              return d.toUTCString().slice(17, 25);
+            }
+
+            function fmtFull(iso) {
+              return iso.replace('T', ' ').replace('Z', ' UTC');
+            }
+
+            function escapeHtml(s) {
+              return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+            }
+
+            function classify(rec) {
+              if (rec.type === 'http') return statusClass(rec.status);
+              if (rec.type === 'worker') return 'worker';
+              return 'apns';
+            }
+
+            function groupKey(cls) {
+              if (cls === 'c2xx' || cls === 'c3xx') return 'success';
+              if (cls === 'c4xx' || cls === 'c5xx') return 'error';
+              return cls;
+            }
+
+            function buildRow(rec, idx) {
+              const cls = classify(rec);
+              let badgeText, mainHtml, methodHtml = '', durationHtml = '';
+
+              if (rec.type === 'http') {
+                badgeText = rec.status;
+                methodHtml = `<div class="method">${rec.method}</div>`;
+                mainHtml = `<span class="path">${escapeHtml(rec.path)}</span>`;
+                const slow = rec.duration > 500 ? ' slow' : '';
+                durationHtml = `<div class="duration${slow}">${rec.duration.toFixed(1)}ms</div>`;
+              } else if (rec.type === 'worker') {
+                badgeText = 'SYNC';
+                mainHtml = `<span class="label">${escapeHtml(rec.event)} — ${rec.count} checks found locally</span>`;
+                durationHtml = `<div class="duration">${rec.duration.toFixed(2)}s</div>`;
+              } else {
+                badgeText = 'APNS';
+                let label = rec.message;
+                if (label.startsWith('[APNS LiveActivity] Check updated')) label = 'LiveActivity push: check updated';
+                else if (label.startsWith('[APNS LiveActivity] Notifier invoked')) label = 'LiveActivity notifier invoked';
+                else if (label.includes('SimphonyCheckFetchWorker')) label = 'Simphony check fetched';
+                mainHtml = `<span class="label">${escapeHtml(label)}</span>`;
+              }
+
+              const flagged = rec.type === 'http' && rec.status >= 400;
+
+              return `
+                <div class="entry${flagged ? ' flagged' : ''}" data-cls="${cls}" data-group="${groupKey(cls)}" data-idx="${idx}">
+                  <div class="dot ${cls}"></div>
+                  <div class="row" onclick="toggleEntry(${idx})">
+                    <div class="ts">${fmtTime(rec.ts_iso)}</div>
+                    <div class="badge ${cls}">${badgeText}</div>
+                    ${methodHtml}
+                    <div class="main-text">${mainHtml}</div>
+                    ${durationHtml}
+                    <button class="raw-btn" title="View raw row data" onclick="openRaw(event,${idx})">&#x7B;&#x7D;</button>
+                    <div class="chevron">&#x25B6;</div>
+                  </div>
+                  <div class="detail" id="detail-${idx}">${buildDetail(rec)}</div>
+                </div>
+              `;
+            }
+
+            function buildDetail(rec) {
+              let rows = [];
+              rows.push(['timestamp', fmtFull(rec.ts_iso)]);
+              rows.push(['pod', rec.pod || '—']);
+
+              if (rec.type === 'http') {
+                rows.push(['method', rec.method]);
+                rows.push(['path', rec.path]);
+                rows.push(['status', `${rec.status} ${STATUS_TEXT[rec.status] || ''}`, rec.status >= 400 ? 'err' : '']);
+                rows.push(['duration', rec.duration.toFixed(2) + ' ms']);
+                rows.push(['request_id', rec.request_id]);
+                rows.push(['client_ip', rec.ip || '—']);
+                if (rec.status >= 400) {
+                  rows.push(['note', 'Non-2xx response on this check\'s discount endpoint — investigate request body / discount eligibility rules for check 2382.', 'err']);
+                }
+              } else if (rec.type === 'worker') {
+                rows.push(['event', rec.event]);
+                rows.push(['started_at', fmtFull(rec.started_at + 'Z')]);
+                rows.push(['duration', rec.duration.toFixed(2) + ' s']);
+                rows.push(['checks_found', rec.count]);
+              } else {
+                rows.push(['message', rec.message, 'hl']);
+              }
+
+              let html = '<div class="detail-grid">';
+              for (const [k, v, cls] of rows) {
+                html += `<div class="k">${k}</div><div class="v${cls ? ' ' + cls : ''}">${escapeHtml(String(v ?? ''))}</div>`;
+              }
+              html += '</div>';
+
+              if (rec.check_numbers) {
+                html += '<div style="margin-top:8px" class="checklist">';
+                for (const c of rec.check_numbers) {
+                  html += `<span class="chk-tag${c === TARGET.check ? ' target' : ''}">${c}</span>`;
+                }
+                html += '</div>';
+              }
+
+              return html;
+            }
+
+            function toggleEntry(idx) {
+              document.querySelector(`.entry[data-idx="${idx}"]`).classList.toggle('expanded');
+            }
+
+            // ── Raw modal ────────────────────────────────────────────────────────────────
+
+            function renderFieldValue(meta, value) {
+              const isNull = value === null || value === undefined || value === '';
+              if (isNull) return `<span class="val-null">null</span>`;
+
+              if (meta.fmt === 'arr' && Array.isArray(value)) {
+                const items = value.map(v => `<span class="val-arr-item">${escapeHtml(String(v))}</span>`).join('');
+                return `<span class="val-arr">${items}</span>`;
+              }
+              if (meta.fmt === 'ts') {
+                return `<span class="val-ts">${escapeHtml(String(value))}</span>`;
+              }
+              if (meta.fmt === 'num') {
+                const display = meta.unit ? `${value} ${meta.unit}` : String(value);
+                return `<span class="val-num">${escapeHtml(display)}</span>`;
+              }
+              if (meta.fmt === 'bool') {
+                return `<span class="val-bool">${escapeHtml(String(value))}</span>`;
+              }
+              return escapeHtml(String(value));
+            }
+
+            let currentRawIdx = 0;
+
+            function renderRaw(idx) {
+              const rec = DATA[idx];
+              const cls = classify(rec);
+
+              // Header: badge + title
+              const badgeTxt = rec.type === 'http' ? rec.status : rec.type === 'worker' ? 'SYNC' : 'APNS';
+              document.getElementById('rawBadge').innerHTML = `<div class="badge ${cls}">${badgeTxt}</div>`;
+              document.getElementById('rawTitle').textContent = `Row ${idx + 1} — raw data`;
+              document.getElementById('rawCounter').textContent = `${idx + 1} / ${DATA.length}`;
+              document.getElementById('rawPrev').disabled = idx === 0;
+              document.getElementById('rawNext').disabled = idx === DATA.length - 1;
+
+              // Build table grouped by section
+              const seenSections = [];
+              const sections = {};
+              for (const meta of FIELD_META) {
+                if (!sections[meta.section]) {
+                  sections[meta.section] = [];
+                  seenSections.push(meta.section);
+                }
+                sections[meta.section].push(meta);
+              }
+
+              // Also collect any keys in the record not listed in FIELD_META
+              const knownKeys = new Set(FIELD_META.map(m => m.key));
+              const extraKeys = Object.keys(rec).filter(k => !knownKeys.has(k));
+              if (extraKeys.length) {
+                seenSections.push('Other');
+                sections['Other'] = extraKeys.map(k => ({ key: k, label: k, section: 'Other', fmt: 'str' }));
+              }
+
+              let html = '';
+              for (const section of seenSections) {
+                html += `<tr class="section-heading"><td colspan="2">${escapeHtml(section)}</td></tr>`;
+                for (const meta of sections[section]) {
+                  const value = rec[meta.key];
+                  const isNull = value === null || value === undefined || value === '';
+                  html += `<tr class="${isNull ? 'null-row' : ''}">
+                    <td>${escapeHtml(meta.label)}</td>
+                    <td>${renderFieldValue(meta, value)}</td>
+                  </tr>`;
+                }
+              }
+
+              document.getElementById('rawTable').innerHTML = html;
+              document.getElementById('modal-body-scroll')?.scrollTo(0, 0);
+            }
+
+            function openRaw(event, idx) {
+              event.stopPropagation();
+              currentRawIdx = idx;
+              renderRaw(currentRawIdx);
+              document.getElementById('rawOverlay').classList.add('open');
+              document.body.style.overflow = 'hidden';
+            }
+
+            function navigateRaw(delta) {
+              const next = currentRawIdx + delta;
+              if (next < 0 || next >= DATA.length) return;
+              currentRawIdx = next;
+              renderRaw(currentRawIdx);
+            }
+
+            function closeRawBtn() {
+              document.getElementById('rawOverlay').classList.remove('open');
+              document.body.style.overflow = '';
+            }
+
+            function closeRaw(event) {
+              if (event.target === document.getElementById('rawOverlay')) closeRawBtn();
+            }
+
+            document.addEventListener('keydown', e => {
+              if (!document.getElementById('rawOverlay').classList.contains('open')) return;
+              if (e.key === 'Escape') closeRawBtn();
+              else if (e.key === 'ArrowLeft')  navigateRaw(-1);
+              else if (e.key === 'ArrowRight') navigateRaw(1);
+            });
+
+            // ── Render ───────────────────────────────────────────────────────────────────
+
+            function render() {
+              const tl = document.getElementById('timeline');
+              tl.innerHTML = DATA.map((rec, idx) => buildRow(rec, idx)).join('');
+            }
+
+            function buildFilters() {
+              const groups = ['all', 'success', 'error', 'worker', 'apns'];
+              const labels = { all: 'All', success: '2xx/3xx', error: '4xx/5xx', worker: 'Background sync', apns: 'Push / APNS' };
+              const counts = { all: DATA.length, success: 0, error: 0, worker: 0, apns: 0 };
+              DATA.forEach(rec => { counts[groupKey(classify(rec))]++; });
+
+              const container = document.getElementById('filters');
+              container.innerHTML = groups.map(g =>
+                `<div class="filter-btn${g === 'all' ? ' active' : ''}" data-f="${g === 'success' ? '2xx' : g === 'error' ? '5xx' : g}" data-group="${g}" onclick="applyFilter('${g}')">${labels[g]} <span class="count">${counts[g]}</span></div>`
+              ).join('');
+            }
+
+            function applyFilter(group) {
+              document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.group === group));
+              let visibleCount = 0;
+              document.querySelectorAll('.entry').forEach(el => {
+                const show = group === 'all' || el.dataset.group === group;
+                el.classList.toggle('hidden', !show);
+                if (show) visibleCount++;
+              });
+              document.getElementById('emptyState').style.display = visibleCount === 0 ? 'block' : 'none';
+            }
+
+            render();
+            buildFilters();
+            buildHeader();
+        </script>
+    </body>
+</html>
