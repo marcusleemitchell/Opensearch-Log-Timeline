@@ -63,7 +63,7 @@ Go to Kibana > Discover > New Search > Add the query above > Run the search > Sa
 
 ![Kibana search and save](./docs/sc_Kibana_Search.png)
 
-Save th e rsulting file locally as `report.xlsx` and run the following to generate a view.
+Save the resulting file locally as `report.xlsx` and run the following to generate a view.
 
 ```sh
 # Single file — writes report_timeline.html next to the input
