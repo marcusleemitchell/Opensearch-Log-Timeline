@@ -61,7 +61,7 @@ This will result in a small query that can be used to generate a report in Kiban
 
 Go to Kibana > Discover > New Search > Add the query above > Run the search > Save as a report > Export as `.xlsx` file.
 
-![Screenshot 2026-06-19 at 10.11.53](./docs/Screenshot 2026-06-19 at 10.11.53.png)
+![Kibana search and save](./docs/sc_Kibana_Search.png)
 
 Save th e rsulting file locally as `report.xlsx` and run the following to generate a view.
 
