@@ -264,6 +264,12 @@ class TestClassify < Minitest::Test
   def test_blank_string_event_and_status_yields_apns
     assert_equal 'apns', classify({ status: '', event: '  ', message: 'push' })
   end
+
+  # Regression: blank? must gate the event check so an empty-string event
+  # (as apns rows produce) doesn't accidentally classify the record as 'worker'.
+  def test_blank_string_event_with_nil_status_yields_apns
+    assert_equal 'apns', classify({ status: nil, event: '', message: 'push sent' })
+  end
 end
 
 class TestDeriveAppName < Minitest::Test
@@ -593,6 +599,28 @@ class TestExtractRecords < Minitest::Test
     records = nil
     capture_io { records = extract_records('fake.xlsx') }
     assert_equal 'other', records.first[:type]
+  end
+
+  # Regression: a worker row with no duration cell must produce duration: nil,
+  # not crash — the `unless blank?` guard must prevent `.to_f` on nil.
+  def test_blank_duration_stays_nil
+    install_sheet([row_for(ts: KIBANA_TS, event: 'job.done', duration: nil)])
+    records = nil
+    capture_io { records = extract_records('fake.xlsx') }
+    assert_nil records.first[:duration],
+               'blank duration cell should produce nil, not raise or coerce'
+  end
+
+  # Regression: apns rows never have a duration; extract_records must pass nil
+  # through so the JS template receives null rather than crashing on .toFixed().
+  def test_apns_row_with_no_duration_has_nil_duration_and_correct_type
+    install_sheet([row_for(ts: KIBANA_TS, message: 'push notification sent',
+                           event: nil, status: nil, duration: nil)])
+    records = nil
+    capture_io { records = extract_records('fake.xlsx') }
+    r = records.first
+    assert_equal 'apns', r[:type]
+    assert_nil r[:duration], 'apns duration should be nil when cell is blank'
   end
 
   def test_warns_about_missing_columns

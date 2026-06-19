@@ -56,5 +56,6 @@ build-iPhoneSimulator/
 # .rubocop-https?--*
 
 # Locally run source and output files
+*.zip
 *.xlsx
 *_timeline.html

@@ -742,12 +742,17 @@
                 badgeText = rec.status;
                 methodHtml = `<div class="method">${rec.method}</div>`;
                 mainHtml = `<span class="path">${escapeHtml(rec.path)}</span>`;
-                const slow = rec.duration > 500 ? ' slow' : '';
-                durationHtml = `<div class="duration${slow}">${rec.duration.toFixed(1)}ms</div>`;
+                if (rec.duration != null) {
+                  const slow = rec.duration > 500 ? ' slow' : '';
+                  durationHtml = `<div class="duration${slow}">${rec.duration.toFixed(1)}ms</div>`;
+                }
               } else if (rec.type === 'worker') {
                 badgeText = 'SYNC';
-                mainHtml = `<span class="label">${escapeHtml(rec.event)} — ${rec.count} checks found locally</span>`;
-                durationHtml = `<div class="duration">${rec.duration.toFixed(2)}s</div>`;
+                const countLabel = rec.count != null ? `${rec.count} checks found locally` : 'checks found locally';
+                mainHtml = `<span class="label">${escapeHtml(rec.event)} — ${countLabel}</span>`;
+                if (rec.duration != null) {
+                  durationHtml = `<div class="duration">${rec.duration.toFixed(2)}s</div>`;
+                }
               } else {
                 badgeText = 'APNS';
                 let label = rec.message;
@@ -785,17 +790,19 @@
                 rows.push(['method', rec.method]);
                 rows.push(['path', rec.path]);
                 rows.push(['status', `${rec.status} ${STATUS_TEXT[rec.status] || ''}`, rec.status >= 400 ? 'err' : '']);
-                rows.push(['duration', rec.duration.toFixed(2) + ' ms']);
+                rows.push(['duration', rec.duration != null ? rec.duration.toFixed(2) + ' ms' : '—']);
                 rows.push(['request_id', rec.request_id]);
                 rows.push(['client_ip', rec.ip || '—']);
                 if (rec.status >= 400) {
-                  rows.push(['note', 'Non-2xx response on this check\'s discount endpoint — investigate request body / discount eligibility rules for check 2382.', 'err']);
+                  const cn = META.check_number || TARGET.check || '';
+                  const note = `Non-2xx response${cn ? ' for check ' + cn : ''} — investigate request body / eligibility rules.`;
+                  rows.push(['note', note, 'err']);
                 }
               } else if (rec.type === 'worker') {
                 rows.push(['event', rec.event]);
-                rows.push(['started_at', fmtFull(rec.started_at + 'Z')]);
-                rows.push(['duration', rec.duration.toFixed(2) + ' s']);
-                rows.push(['checks_found', rec.count]);
+                if (rec.started_at) rows.push(['started_at', fmtFull(rec.started_at + 'Z')]);
+                rows.push(['duration', rec.duration != null ? rec.duration.toFixed(2) + ' s' : '—']);
+                rows.push(['checks_found', rec.count != null ? rec.count : '—']);
               } else {
                 rows.push(['message', rec.message, 'hl']);
               }

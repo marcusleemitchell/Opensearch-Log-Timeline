@@ -24,6 +24,47 @@ Clone or download the repository so that `log_timeline.rb` and `template.html` a
 
 ## Usage
 
+There's a pre-use tasks to create a query from a given check
+
+```ruby
+record = Persistence::HousepayCheckSummer25.find('db2ab642-6981-49d4-b63b-c36684e433fc')
+
+def build_dql_query(record, time_field: "@timestamp", instance: "chq-master")
+  values = [record[:id], record[:check_number], record[:global_id]].compact
+
+  raise ArgumentError, "No identifiers present on record" if values.empty?
+
+  value_clause = "(#{values.map { |v| %("#{v}") }.join(' OR ')})"
+
+  clauses = [value_clause]
+
+  if record[:created_at]
+    start_time = record[:created_at].utc.iso8601
+    end_time   = (record[:updated_at] || record[:created_at]).utc.iso8601
+    clauses << "#{time_field} >= \"#{start_time}\""
+    clauses << "#{time_field} <= \"#{end_time}\""
+  end
+
+  clauses << %Q(kubernetes.labels.app_kubernetes_io/instance: "#{instance}")
+
+  clauses.join(' AND ')
+
+  puts build_dql_query(record)
+end
+```
+
+This will result in a small query that can be used to generate a report in Kibana. Once the report is generated, it can be exported as an `.xlsx` file and processed with `log_timeline.rb`.
+
+```
+("db2ab642-6981-49d4-b63b-c36684e433fc" OR "1281" OR "20005181678") AND @timestamp >= "2026-06-17T11:49:17Z" AND @timestamp <= "2026-06-17T12:05:45Z" AND kubernetes.labels.app_kubernetes_io/instance: "chq-master"
+```
+
+Go to Kibana > Discover > New Search > Add the query above > Run the search > Save as a report > Export as `.xlsx` file.
+
+![Screenshot 2026-06-19 at 10.11.53](./docs/Screenshot 2026-06-19 at 10.11.53.png)
+
+Save th e rsulting file locally as `report.xlsx` and run the following to generate a view.
+
 ```sh
 # Single file — writes report_timeline.html next to the input
 ruby log_timeline.rb report.xlsx
