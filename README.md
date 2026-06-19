@@ -161,6 +161,12 @@ The **app name** is derived from Kubernetes pod names by finding the longest com
 
 ---
 
+The result is a very compact, interactive timeline view of all log entries in the report, with no external dependencies.
+
+![Log View](./docs/sc_Log_Output.png)
+
+---
+
 ## Development / Testing
 
 The test suite lives in `test_log_timeline.rb` and uses Minitest (no additional setup needed beyond `gem install minitest`).
